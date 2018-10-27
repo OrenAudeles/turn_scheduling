@@ -10,6 +10,7 @@ project(${PROJ_DEBUG})
 
 set(SOURCES
     main.cpp
+    profiler.cpp
 )
 set(ALL_SOURCES
     ${SOURCES}
