@@ -7,14 +7,16 @@
 #include <cstdio>
 #include <algorithm> // for partial_sort
 
+#include "test/tests.h"
+
 #define USE_QUICKSORT 0
 
 void sort_to_buckets(void);
 int do_action_iterate_buckets(void);
 
 constexpr int MAX_ACCUMULATORS = 4096 << 8;
-constexpr int TOTAL_ACTIONS = 10000000;
-constexpr int N_BUCKETS = 32;
+constexpr int TOTAL_ACTIONS = 40000000;
+constexpr int N_BUCKETS = 256;
 
 // BEST_N == MAX_ACCUMULATORS is equivalent to reordering the entire acting set.
 int BEST_N = MAX_ACCUMULATORS >> 0;
@@ -388,10 +390,7 @@ void print_actions(void){
 	}
 }
 
-int main(int argc, const char** argv){
-	(void)(argc);
-	(void)(argv);
-
+void main_test(void){
 	srand(0);
 
 	xorshiro128plus_generator_t crng = make_generator();
@@ -433,8 +432,18 @@ int main(int argc, const char** argv){
 		//printf("BEST_N == %d TOTAL = %d\n", BEST_N, MAX_ACCUMULATORS);
 		//printf("%d turns to reach threshold (%d actions)\n", turns, total_actions);
 	}
+}
+
+int main(int argc, const char** argv){
+	(void)(argc);
+	(void)(argv);
+	
+	//main_test();
+	test::test_turn_tables();
+	//test::test_no_accumulation();
 
 	prof::p4::dump_profile_tree();
+	//prof::p4::dump_profile();
 	return 0;
 }
 

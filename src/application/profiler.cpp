@@ -29,12 +29,13 @@ namespace prof{ namespace detail{
 
 	struct SampleStorage{
 		std::vector<SampleEvent> start, end;
+		prof::timer::timepoint _begin;
 
 		SampleStorage(int reserve = 128){
 			start.reserve(reserve);
 			end.reserve(reserve);
 
-			begin_sample("<BEGIN>");
+			_begin = prof::timer::now();
 		}
 
 		void begin_sample(const char* name){
@@ -42,6 +43,12 @@ namespace prof{ namespace detail{
 		}
 		void end_sample(const char* name){
 			end.push_back({name, prof::timer::now()});
+		}
+		void begin_pop(void){
+			start.pop_back();
+		}
+		void end_pop(void){
+			end.pop_back();
 		}
 	};
 
@@ -62,13 +69,15 @@ namespace prof{ namespace p4{
 		prof::detail::merge_events(ordered_events);
 
 		printf("PROFILE RESULTS\n");
-		prof::timer::timepoint beginning = ordered_events[0].event.time;
+		prof::timer::timepoint beginning = prof::detail::sampler._begin;
 		for(const auto& event : ordered_events ){
 			uint64_t duration = prof::timer::duration_nanoseconds(beginning, event.event.time);
 			printf("[%s] @ %12lu ns : %s\n", (event.mode == prof::detail::CategorizedSample::SAMPLE_START ? "BEG" : "END"), duration, event.event.name);
 		}
 	}
 	void dump_profile_tree(void){
+		prof::timer::timepoint _end = prof::timer::now();
+
 		std::vector<prof::detail::CategorizedSample> ordered_events;
 		prof::detail::merge_events(ordered_events);
 
@@ -80,21 +89,24 @@ namespace prof{ namespace p4{
 		struct CombinedSample{
 			const char* name;
 			prof::timer::timepoint time_start, time_end;
-			int n_children, par_ndx;
+			int n_children, par_ndx, depth;
 
 			CombinedSample(const prof::detail::CategorizedSample& sample):
-				name(sample.event.name), time_start(sample.event.time), n_children(0), par_ndx(0){}
+				name(sample.event.name), time_start(sample.event.time), n_children(0), par_ndx(0), depth(0){}
+			CombinedSample(const char* _n, prof::timer::timepoint _s, prof::timer::timepoint _e):
+				name(_n), time_start(_s), time_end(_e), n_children(0), par_ndx(0), depth(0){}
 		};
 
 		std::vector<CombinedSample> samples;
 		samples.reserve(prof::detail::sampler.start.size());
 
-		prof::timer::timepoint beginning = ordered_events[0].event.time;
+		prof::timer::timepoint beginning = prof::detail::sampler._begin;
 
-		samples.push_back(CombinedSample(ordered_events[0]));
+		// Push begin/end sample
+		samples.push_back(CombinedSample("<BEGIN>", beginning, _end));
 		sample_stack[sample_stack_sz++] = 0;
 
-		for( size_t ndx = 1, event_sz = ordered_events.size(); ndx < event_sz; ++ndx ) {
+		for( size_t ndx = 0, event_sz = ordered_events.size(); ndx < event_sz; ++ndx ) {
 			const prof::detail::CategorizedSample& event = ordered_events[ndx];
 			// Push on SAMPLE_BEGIN
 			// Pop on SAMPLE_END
@@ -102,6 +114,7 @@ namespace prof{ namespace p4{
 				case prof::detail::CategorizedSample::SAMPLE_START:{
 					CombinedSample new_sample(event);
 					new_sample.par_ndx = sample_stack[sample_stack_sz - 1];
+					new_sample.depth = sample_stack_sz;
 
 					++samples[new_sample.par_ndx].n_children;
 					//sample_stack[sample_stack_sz++] = ndx;
@@ -126,13 +139,21 @@ namespace prof{ namespace p4{
 			}
 		}
 
+		auto parent_duration = [&](int ndx){
+			const auto _start = samples[ndx].time_start;
+			const auto _end   = samples[ndx].time_end;
+
+			return prof::timer::duration_nanoseconds(_start, _end);
+		};
 
 		for( auto& sample : samples ) {
 			uint64_t duration = prof::timer::duration_nanoseconds(sample.time_start, sample.time_end);
 			uint64_t s_dur = prof::timer::duration_nanoseconds(beginning, sample.time_start);
 			uint64_t e_dur = prof::timer::duration_nanoseconds(beginning, sample.time_end);
 
-			printf("[%12lu ns - %12lu ns] (%12lu ns) %s\n", s_dur, e_dur, duration, sample.name);
+			uint64_t par_dur = parent_duration(sample.par_ndx);
+
+			printf("[%12lu ns - %12lu ns] (%12lu ns) %6.2f%% %*.*s%s\n", s_dur, e_dur, duration, 100 * duration / (double)par_dur, sample.depth, sample.depth, "", sample.name);
 		}
 	}
 }}

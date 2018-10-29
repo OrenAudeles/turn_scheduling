@@ -12,8 +12,17 @@ set(SOURCES
     main.cpp
     profiler.cpp
 )
+set(TEST_SOURCES
+    test/turn_table.cpp
+    test/no_accumulate.cpp
+)
 set(ALL_SOURCES
     ${SOURCES}
+    ${TEST_SOURCES}
+)
+
+include_directories(
+    .
 )
 
 add_executable(${PROJ} ${ALL_SOURCES})
